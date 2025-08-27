@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>To-Do List (Simple+)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --bg:#f5f6ff; --card:#ffffff; --text:#222; --muted:#666; --lav:#e6e6fa; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; font-family: system-ui, Arial, sans-serif; color: var(--text);
+      background: linear-gradient(180deg, var(--lav), var(--bg));
+      min-height: 100vh; display: grid; place-items: center; padding: 24px;
+    }
+    .app {
+      width: 100%; max-width: 550px; background: var(--card);
+      border-radius: 16px; padding: 20px; box-shadow: 0 10px 30px rgba(0,0,0,.08);
+    }
+    h1 { margin: 4px 0 16px; text-align: center; font-size: 1.6rem; }
+    .row { display: flex; gap: 8px; }
+    input[type="text"] {
+      flex: 1; padding: 12px 14px; border: 1px solid #ddd; border-radius: 12px;
+      outline: none;
+    }
+    button {
+      padding: 12px 14px; border: 0; border-radius: 12px; cursor: pointer;
+    }
+    .add { background: #6c63ff; color: #fff; }
+    .add:disabled { opacity: .5; cursor: not-allowed; }
+    ul { list-style: none; margin: 16px 0 0; padding: 0; }
+    li {
+      display: grid; grid-template-columns: 28px 1fr auto; align-items: center;
+      gap: 10px; padding: 10px; border: 1px solid #eee; border-radius: 12px; margin-bottom: 10px;
+      transition: background .15s ease;
+    }
+    li.done { background: #f3f3ff; }
+    li .title { word-break: break-word; }
+    li.done .title { text-decoration: line-through; color: var(--muted); }
+    .tiny-btn {
+      font-size: .9rem; padding: 6px 10px; border-radius: 10px; background: #eee;
+    }
+    .danger { background: #ffdddd; }
+    .footer {
+      display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: center;
+      margin-top: 12px; color: var(--muted); font-size: .95rem;
+    }
+    .filters { display: flex; gap: 6px; }
+    .filters button { background: #eee; }
+    .filters .active { background: #dcdcff; }
+    .empty { text-align: center; color: var(--muted); padding: 16px 0; }
+    @media (hover:hover) {
+      li:hover { background: #fafaff; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" role="application" aria-label="To-Do List">
+    <h1>📝 To-Do List</h1>
+
+    <div class="row" aria-label="Add a new task">
+      <input id="task-input" type="text" placeholder="What do you need to do?" autocomplete="off" />
+      <button class="add" id="add-btn" disabled>Add</button>
+    </div>
+
+    <ul id="list" aria-live="polite"></ul>
+    <div id="empty" class="empty" hidden>No tasks yet. Add your first one!</div>
+
+    <div class="footer">
+      <span id="count">0 items</span>
+      <div class="filters" role="tablist" aria-label="Filters">
+        <button data-filter="all" class="active" role="tab">All</button>
+        <button data-filter="active" role="tab">Active</button>
+        <button data-filter="done" role="tab">Completed</button>
+      </div>
+      <button id="clear-done" class="tiny-btn danger">Clear completed</button>
+    </div>
+  </div>
+
+  <script>
+    // --- Simple state + persistence ---
+    const STORAGE_KEY = "simple_plus_todos_v1";
+    const $ = (sel) => document.querySelector(sel);
+
+    const state = {
+      todos: load(),
+      filter: "all", // 'all' | 'active' | 'done'
+    };
+
+    const input = $("#task-input");
+    const addBtn = $("#add-btn");
+    const listEl = $("#list");
+    const emptyEl = $("#empty");
+    const countEl = $("#count");
+    const clearDoneBtn = $("#clear-done");
+    const filterBtns = [...document.querySelectorAll(".filters button")];
+
+    function load() {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      } catch { return []; }
+    }
+    function save() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state.todos));
+    }
+
+    // --- UI helpers ---
+    function update() {
+      // filter
+      const filtered = state.todos.filter(t =>
+        state.filter === "all" ? true :
+        state.filter === "active" ? !t.done : t.done
+      );
+
+      // render list
+      listEl.innerHTML = "";
+      filtered.forEach(todo => listEl.appendChild(renderItem(todo)));
+
+      // empty state
+      const isEmpty = filtered.length === 0;
+      emptyEl.hidden = !isEmpty;
+
+      // count
+      const activeCount = state.todos.filter(t => !t.done).length;
+      countEl.textContent = `${activeCount} item${activeCount === 1 ? "" : "s"} left`;
+      save();
+    }
+
+    function renderItem(todo) {
+      const li = document.createElement("li");
+      li.dataset.id = todo.id;
+      if (todo.done) li.classList.add("done");
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = todo.done;
+      checkbox.ariaLabel = "Toggle completed";
+
+      const title = document.createElement("div");
+      title.className = "title";
+      title.textContent = todo.text;
+      title.title = "Double-click to edit";
+
+      const actions = document.createElement("div");
+      const del = document.createElement("button");
+      del.textContent = "Delete";
+      del.className = "tiny-btn danger";
+
+      actions.appendChild(del);
+      li.append(checkbox, title, actions);
+
+      // toggle done
+      checkbox.addEventListener("change", () => {
+        todo.done = checkbox.checked;
+        li.classList.toggle("done", todo.done);
+        update();
+      });
+
+      // delete
+      del.addEventListener("click", () => {
+        state.todos = state.todos.filter(t => t.id !== todo.id);
+        update();
+      });
+
+      // quick edit (double-click)
+      title.addEventListener("dblclick", () => startEdit(li, todo, title));
+
+      return li;
+    }
+
+    function startEdit(li, todo, titleEl) {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = todo.text;
+      input.style.padding = "8px 10px";
+      input.style.border = "1px solid #ddd";
+      input.style.borderRadius = "8px";
+      li.replaceChild(input, titleEl);
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+
+      const finish = (commit) => {
+        if (commit) {
+          const text = input.value.trim();
+          if (text) todo.text = text;
+        }
+        li.replaceChild(titleEl, input);
+        titleEl.textContent = todo.text;
+        update();
+      };
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") finish(true);
+        if (e.key === "Escape") finish(false);
+      });
+      input.addEventListener("blur", () => finish(true));
+    }
+
+    // --- events ---
+    function addTodoFromInput() {
+      const text = input.value.trim();
+      if (!text) return;
+      state.todos.unshift({ id: Date.now().toString(36), text, done: false });
+      input.value = "";
+      addBtn.disabled = true;
+      update();
+    }
+
+    input.addEventListener("input", () => {
+      addBtn.disabled = input.value.trim().length === 0;
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && input.value.trim()) addTodoFromInput();
+    });
+    addBtn.addEventListener("click", addTodoFromInput);
+
+    clearDoneBtn.addEventListener("click", () => {
+      state.todos = state.todos.filter(t => !t.done);
+      update();
+    });
+
+    filterBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        state.filter = btn.dataset.filter;
+        filterBtns.forEach(b => b.classList.toggle("active", b === btn));
+        update();
+      });
+    });
+
+    // first paint
+    update();
+  </script>
+</body>
+</html>
